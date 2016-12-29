@@ -1,0 +1,145 @@
+---
+title: "LHP Quality Control Script"
+author: "M Kapur"
+date_updated: 10-21-2016
+output:
+  html_document: default
+  html_notebook: default
+date_created: 10-21-2016
+---
+
+### Use this script to quality control any entered data that conforms to the the standards outlined in the APEX files. It will produce diagnostic plots and tables so you can identify aberrant data points.
+#### Last update M Kapur 10 21 2016
+```{r, warning = FALSE, message = FALSE}
+require(ggplot2)
+require(RColorBrewer)
+require(dplyr)
+
+setwd("G:/_APEX")
+## Read in the CSV
+mas <- read.csv('xAPEX_MASTER_081216.csv', stringsAsFactors = FALSE, na.strings = c('-','NA'))
+
+## use this to drop out catch log information
+mas <- mas[-c(10:18)]
+
+## reformat the fork length column so you can plot it
+mas$Fork.length.cm <- as.numeric(mas$Fork.length.cm)
+
+## inspect the categorical variables for spelling errors or duplicates
+sort(unique(mas$Label.spp.code))
+sort(unique(mas$Macro.sex))
+sort(unique(mas$Location))
+```
+### Checking Biosampling Data
+ #### 1. Length and Weight
+```{r, warning = FALSE, message = FALSE}
+## separate the purchased from cruise data
+noPur <- subset(mas, Source != 'RFP' & Source != 'Vendors' & Source != 'UFA' & Source != 'SAP')
+Pur <- subset(mas, Source == 'RFP'  | Source == 'Vendors'  | Source == 'UFA'  | Source == 'SAP')
+
+## These plots help you view biosampling data points that seem off the norm by length and weight
+ggplot(noPur, aes(y = Fork.length.cm, x = Weight.kg, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Weight at Length, All Cruise Data')+
+  theme_bw() +
+  facet_wrap(~Source)
+  
+## purchased data may display more variability, especially the UFA source which has thousands of records
+ggplot(Pur, aes(y = Fork.length.cm, x = Weight.kg, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Weight at Length, All Purchased Data')+
+  theme_bw()+
+  facet_wrap(~Source)
+
+## modify this code to 'zoom in' on a specific species or source
+ggplot(subset(Pur, Source == 'UFA'), aes(y = Fork.length.cm, x = Weight.kg, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Weight at Length, All Purchased Data')+
+  theme_bw()+
+  facet_wrap(~Species)
+
+## Right and Left otolith weights should be generally identical
+ggplot(mas, aes(x = Weight.l, y = Weight.r, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Oto Comparison by Weight')+
+  geom_abline(intercept=0,slope=1)+
+  theme_bw()
+```
+ #### 2. Otolith QC
+```{r, warning = FALSE, message = FALSE}
+## this code will help you identify which points you're seeing on the graph that seem odd. We are selecting points where the L/R ratio is either less than 1/2 or greater than 3/2. The first line will cover the points that fall below the 1-1 line, and the second those that lie above it. Use the Fish Data Number to verify that point. The next chunk does the same for otolith weight.
+subset(mas, Weight.r/Weight.l < 0.5)[,c(1,2,3,13,16)]
+subset(mas, Weight.r/Weight.l > 1.5)[,c(1,2,3,13,16)]
+
+ggplot(mas, aes(x = Length.l, y = Length.r, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Oto Comparison by Length')+
+  geom_abline(intercept=0,slope=1)+
+  theme_bw()
+
+subset(mas, Length.r/Length.l < 0.5)[,c(1,2,3,13,16)]
+subset(mas, Length.r/Length.l > 1.5)[,c(1,2,3,13,16)]
+
+ggplot(mas, aes(x = Width.l, y = Width.r, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Oto Comparison by Width')+
+  geom_abline(intercept=0,slope=1)+
+  theme_bw()
+subset(mas, Width.r/Width.l < 0.5)[,c(1,2,3,13,16)]
+subset(mas, Width.r/Width.l > 1.5)[,c(1,2,3,13,16)]
+
+ggplot(mas, aes(x = Thickness.l, y = Thickness.r, colour = Source))+
+  geom_point(alpha = 0.5) +
+  scale_colour_brewer(palette = 'Spectral')+
+  ggtitle('Oto Comparison by Thickness')+
+  geom_abline(intercept=0,slope=1)+
+  theme_bw()
+subset(mas, Thickness.r/Thickness.l < 0.5)[,c(1,2,3,13,16)]
+subset(mas, Thickness.r/Thickness.l > 1.5)[,c(1,2,3,13,16)]
+```
+### Use this R code to systematically replace species names and other misspellings. You can also do this in Excel.
+```{r, warning = FALSE, message = FALSE, eval = FALSE}
+## Updating RFP from RAW biosampling MASTER. The cleaned up version has no date at the end and is in the APEX folder
+setwd("G:/_APEX")
+rfp = read.csv('RFP Biosampling MASTER.csv')
+
+## Replace Hawaiian names with 4L codes, AT YOUR OWN RISK
+rfp$Species[rfp$HISpecies == 'Lehi'  | rfp$HISpecies == 'LEHI' | rfp$HISpecies == 'LEHU'] <- 'APRU'
+rfp$Species[rfp$HISpecies == 'Uku'  | rfp$HISpecies == 'UKU'] <- "APVI"
+rfp$Species[rfp$HISpecies == 'EHU'] <- "ETCA"
+rfp$Species[rfp$HISpecies == 'Onaga'  | rfp$HISpecies == 'ONAGA'] <- "ETCO"
+rfp$Species[rfp$HISpecies == 'OPAKAPAKA'  | rfp$HISpecies == 'Paka'] <- "PRFI"
+rfp$Species[rfp$HISpecies == 'Kalekale'  | rfp$HISpecies == 'KALEKALE'] <- "PRSI"
+
+
+## Make a single column for 'fishermen'
+rfpR <- subset(rfp, royMorioka == 'X')
+rfpL <- subset(rfp, layneNakagawa == 'X')
+rfpE <- subset(rfp, layneNakagawa == 'W' & royMorioka == 'W')
+rfpL$fisherman <- 'Layne Nakagawa'
+rfpR$fisherman <- 'Roy Morioka'
+rfpE$fisherman <- 'Unknown'
+rfp2 <- rbind(rfpL, rfpR, rfpE)
+
+## Clean up Garden Valley Isle vessel names.
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "Claire G." | rfp$GVI_PURCHASED_VESSEL == "Claire G" ] <- 'CLAIRE G'
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "Celeste T."  
+                         | rfp$GVI_PURCHASED_VESSEL == "Claire T" ] <- 'CELESTE T'
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "Cindy K."] <- 'CINDY K'
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "KAILA-B.F."] <- 'KAILA BF'
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "Nagahisa, Jason"] <- 'JASON NAGAHISA'
+rfp$GVI_PURCHASED_VESSEL[rfp$GVI_PURCHASED_VESSEL == "Fumi S."] <- 'FUMI S'
+
+## make them all uppercase
+rfp$GVI_PURCHASED_VESSEL <- toupper(rfp$GVI_PURCHASED_VESSEL)
+
+## you can automatically write your new data to a csv. If you use the same name it will overwrite your original file.
+
+#write.csv(rfp, paste0(getwd(),'/RFP Biosampling MASTER.csv'), row.names = FALSE)
+```
